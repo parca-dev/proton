@@ -10,6 +10,8 @@ namespace cuda {
 
 template <bool CheckSuccess> CUresult init(int flags);
 
+template <bool CheckSuccess> CUresult driverGetVersion(int *driverVersion);
+
 template <bool CheckSuccess> CUresult ctxSynchronize();
 
 template <bool CheckSuccess> CUresult ctxGetCurrent(CUcontext *pctx);

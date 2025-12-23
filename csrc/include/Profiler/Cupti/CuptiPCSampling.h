@@ -68,7 +68,7 @@ struct ConfigureData {
   void initialize(CUcontext context);
 
   CUpti_PCSamplingConfigurationInfo configureStallReasons();
-  CUpti_PCSamplingConfigurationInfo configureSamplingPeriod();
+  CUpti_PCSamplingConfigurationInfo configureSamplingPeriod(uint32_t frequency = DefaultFrequency);
   CUpti_PCSamplingConfigurationInfo configureSamplingBuffer();
   CUpti_PCSamplingConfigurationInfo configureScratchBuffer();
   CUpti_PCSamplingConfigurationInfo configureHardwareBufferSize();

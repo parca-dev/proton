@@ -20,6 +20,8 @@ void *ExternLibCuda::lib = nullptr;
 
 DEFINE_DISPATCH(ExternLibCuda, init, cuInit, int)
 
+DEFINE_DISPATCH(ExternLibCuda, driverGetVersion, cuDriverGetVersion, int *)
+
 DEFINE_DISPATCH(ExternLibCuda, ctxSynchronize, cuCtxSynchronize)
 
 DEFINE_DISPATCH(ExternLibCuda, ctxGetCurrent, cuCtxGetCurrent, CUcontext *)

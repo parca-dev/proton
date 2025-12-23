@@ -1,4 +1,5 @@
 #include "Profiler/Cupti/CuptiPCSampling.h"
+#include "Profiler/Cupti/CuptiPCSamplingUtils.h"
 #include "Data/Metric.h"
 #include "Driver/GPU/CudaApi.h"
 #include "Driver/GPU/CuptiApi.h"
@@ -13,57 +14,7 @@ namespace proton {
 
 namespace {
 
-uint64_t getCubinCrc(const char *cubin, size_t size) {
-  CUpti_GetCubinCrcParams cubinCrcParams = {
-      /*size=*/CUpti_GetCubinCrcParamsSize,
-      /*cubinSize=*/size,
-      /*cubin=*/cubin,
-      /*cubinCrc=*/0,
-  };
-  cupti::getCubinCrc<true>(&cubinCrcParams);
-  return cubinCrcParams.cubinCrc;
-}
-
-size_t getNumStallReasons(CUcontext context) {
-  size_t numStallReasons = 0;
-  CUpti_PCSamplingGetNumStallReasonsParams numStallReasonsParams = {
-      /*size=*/CUpti_PCSamplingGetNumStallReasonsParamsSize,
-      /*pPriv=*/NULL,
-      /*ctx=*/context,
-      /*numStallReasons=*/&numStallReasons};
-  cupti::pcSamplingGetNumStallReasons<true>(&numStallReasonsParams);
-  return numStallReasons;
-}
-
-std::tuple<uint32_t, std::string, std::string>
-getSassToSourceCorrelation(const char *functionName, uint64_t pcOffset,
-                           const char *cubin, size_t cubinSize) {
-  CUpti_GetSassToSourceCorrelationParams sassToSourceParams = {
-      /*size=*/CUpti_GetSassToSourceCorrelationParamsSize,
-      /*cubin=*/cubin,
-      /*functionName=*/functionName,
-      /*cubinSize=*/cubinSize,
-      /*lineNumber=*/0,
-      /*pcOffset=*/pcOffset,
-      /*fileName=*/NULL,
-      /*dirName=*/NULL,
-  };
-  // Get source can fail if the line mapping is not available in the cubin so we
-  // don't check the return value
-  cupti::getSassToSourceCorrelation<false>(&sassToSourceParams);
-  auto fileNameStr = sassToSourceParams.fileName
-                         ? std::string(sassToSourceParams.fileName)
-                         : "";
-  auto dirNameStr =
-      sassToSourceParams.dirName ? std::string(sassToSourceParams.dirName) : "";
-  // It's user's responsibility to free the memory
-  if (sassToSourceParams.fileName)
-    std::free(sassToSourceParams.fileName);
-  if (sassToSourceParams.dirName)
-    std::free(sassToSourceParams.dirName);
-  return std::make_tuple(sassToSourceParams.lineNumber, fileNameStr,
-                         dirNameStr);
-}
+using namespace cupti::pcsampling;
 
 std::pair<char **, uint32_t *>
 getStallReasonNamesAndIndices(CUcontext context, size_t numStallReasons) {
@@ -128,13 +79,12 @@ size_t matchStallReasonsToIndices(
 }
 
 #define CUPTI_CUDA12_4_VERSION 22
-#define CUPTI_CUDA12_4_PC_DATA_PADDING_SIZE sizeof(uint32_t)
 
-CUpti_PCSamplingData allocPCSamplingData(size_t collectNumPCs,
-                                         size_t numValidStallReasons) {
+// Version-checking wrapper for allocPCSamplingData
+CUpti_PCSamplingData allocPCSamplingDataWithVersionCheck(size_t collectNumPCs,
+                                                         size_t numValidStallReasons) {
   uint32_t libVersion = 0;
   cupti::getVersion<true>(&libVersion);
-  size_t pcDataSize = sizeof(CUpti_PCSamplingPCData);
   // Since CUPTI 12.4, a new field (i.e., correlationId) is added to
   // CUpti_PCSamplingPCData, which breaks the ABI compatibility.
   // Instead of using workarounds, we emit an error message and exit the
@@ -150,32 +100,7 @@ CUpti_PCSamplingData allocPCSamplingData(size_t collectNumPCs,
         " TRITON_CUPTI_INCLUDE_PATH and TRITON_CUPTI_LIB_PATH to resolve the "
         "problem.");
   }
-  CUpti_PCSamplingData pcSamplingData{
-      /*size=*/sizeof(CUpti_PCSamplingData),
-      /*collectNumPcs=*/collectNumPCs,
-      /*totalSamples=*/0,
-      /*droppedSamples=*/0,
-      /*totalNumPcs=*/0,
-      /*remainingNumPcs=*/0,
-      /*rangeId=*/0,
-      /*pPcData=*/
-      static_cast<CUpti_PCSamplingPCData *>(
-          std::calloc(collectNumPCs, sizeof(CUpti_PCSamplingPCData)))};
-  for (size_t i = 0; i < collectNumPCs; ++i) {
-    pcSamplingData.pPcData[i].stallReason =
-        static_cast<CUpti_PCSamplingStallReason *>(std::calloc(
-            numValidStallReasons, sizeof(CUpti_PCSamplingStallReason)));
-  }
-  return pcSamplingData;
-}
-
-void enablePCSampling(CUcontext context) {
-  CUpti_PCSamplingEnableParams params = {
-      /*size=*/CUpti_PCSamplingEnableParamsSize,
-      /*pPriv=*/NULL,
-      /*ctx=*/context,
-  };
-  cupti::pcSamplingEnable<true>(&params);
+  return allocPCSamplingData(collectNumPCs, numValidStallReasons);
 }
 
 void disablePCSampling(CUcontext context) {
@@ -185,48 +110,6 @@ void disablePCSampling(CUcontext context) {
       /*ctx=*/context,
   };
   cupti::pcSamplingDisable<true>(&params);
-}
-
-void startPCSampling(CUcontext context) {
-  CUpti_PCSamplingStartParams params = {
-      /*size=*/CUpti_PCSamplingStartParamsSize,
-      /*pPriv=*/NULL,
-      /*ctx=*/context,
-  };
-  cupti::pcSamplingStart<true>(&params);
-}
-
-void stopPCSampling(CUcontext context) {
-  CUpti_PCSamplingStopParams params = {
-      /*size=*/CUpti_PCSamplingStopParamsSize,
-      /*pPriv=*/NULL,
-      /*ctx=*/context,
-  };
-  cupti::pcSamplingStop<true>(&params);
-}
-
-void getPCSamplingData(CUcontext context,
-                       CUpti_PCSamplingData *pcSamplingData) {
-  CUpti_PCSamplingGetDataParams params = {
-      /*size=*/CUpti_PCSamplingGetDataParamsSize,
-      /*pPriv=*/NULL,
-      /*ctx=*/context,
-      /*pcSamplingData=*/pcSamplingData,
-  };
-  cupti::pcSamplingGetData<true>(&params);
-}
-
-void setConfigurationAttribute(
-    CUcontext context,
-    std::vector<CUpti_PCSamplingConfigurationInfo> &configurationInfos) {
-  CUpti_PCSamplingConfigurationInfoParams infoParams = {
-      /*size=*/CUpti_PCSamplingConfigurationInfoParamsSize,
-      /*pPriv=*/NULL,
-      /*ctx=*/context,
-      /*numAttributes=*/configurationInfos.size(),
-      /*pPCSamplingConfigurationInfo=*/configurationInfos.data(),
-  };
-  cupti::pcSamplingSetConfigurationAttribute<true>(&infoParams);
 }
 
 } // namespace
@@ -248,12 +131,12 @@ CUpti_PCSamplingConfigurationInfo ConfigureData::configureStallReasons() {
   return stallReasonInfo;
 }
 
-CUpti_PCSamplingConfigurationInfo ConfigureData::configureSamplingPeriod() {
+CUpti_PCSamplingConfigurationInfo ConfigureData::configureSamplingPeriod(uint32_t frequency) {
   CUpti_PCSamplingConfigurationInfo samplingPeriodInfo{};
   samplingPeriodInfo.attributeType =
       CUPTI_PC_SAMPLING_CONFIGURATION_ATTR_TYPE_SAMPLING_PERIOD;
   samplingPeriodInfo.attributeData.samplingPeriodData.samplingPeriod =
-      DefaultFrequency;
+      frequency;
   return samplingPeriodInfo;
 }
 
@@ -262,7 +145,7 @@ CUpti_PCSamplingConfigurationInfo ConfigureData::configureSamplingBuffer() {
   samplingBufferInfo.attributeType =
       CUPTI_PC_SAMPLING_CONFIGURATION_ATTR_TYPE_SAMPLING_DATA_BUFFER;
   this->pcSamplingData =
-      allocPCSamplingData(DataBufferPCCount, numValidStallReasons);
+      allocPCSamplingDataWithVersionCheck(DataBufferPCCount, numValidStallReasons);
   samplingBufferInfo.attributeData.samplingDataBufferData.samplingDataBuffer =
       &this->pcSamplingData;
   return samplingBufferInfo;
@@ -369,8 +252,8 @@ void CuptiPCSampling::processPCSamplingData(ConfigureData *configureData,
           CubinData::LineInfoKey{pcData->functionIndex, pcData->pcOffset};
       if (cubinData->lineInfo.find(key) == cubinData->lineInfo.end()) {
         auto [lineNumber, fileName, dirName] =
-            getSassToSourceCorrelation(pcData->functionName, pcData->pcOffset,
-                                       cubinData->cubin, cubinData->cubinSize);
+            getSassToSourceCorrelation<false>(pcData->functionName, pcData->pcOffset,
+                                              cubinData->cubin, cubinData->cubinSize);
         cubinData->lineInfo.try_emplace(key, lineNumber,
                                         std::string(pcData->functionName),
                                         dirName, fileName);
