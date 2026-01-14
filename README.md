@@ -4,7 +4,7 @@
 
 Proton is a lightweight profiler for Triton that captures rich information about program context, metadata, and GPU kernel performance metrics, while keeping both runtime overhead and profile size minimal.
 
-This fork in parca-dev/proton exists for parca-dev/parcagpu, the hope is we can land changes here that parcagpu needs in the context of a continuous GPU profiler that are easy to share and we can bring in changes from triton that make sense. Mostly we're interested in the driver layer to enable single library across CUDA major versions and potentially making parcagpu support roctracer in the future.
+This fork in [parca-dev/proton](http://github.com/parca-dev/proton) exists for [parca-dev/parcagpu](http://github.com/parca-dev/parcagpu), the hope is we can land changes here that parcagpu needs in the context of a continuous GPU profiler that are easy to share and we can bring in changes from triton that make sense. Mostly we're interested in the driver layer to enable single library across CUDA major versions and potentially making parcagpu support roctracer in the future.
 
 ## Installation
 
