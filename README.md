@@ -1,5 +1,7 @@
 # Proton - A Profiler for Triton
 
+This is a fork of [triton's third_party/proton](https://github.com/triton-lang/triton/tree/main/third_party/proton) for use by [parca-dev/parcagpu](https://github.com/parca-dev/parcagpu). The goal is to keep this repo in sync with upstream while extracting the CUPTI callback and driver layer so parcagpu can reuse it for GPU profiling.
+
 ## Introduction
 
 Proton is a lightweight profiler for Triton that captures rich information about program context, metadata, and GPU kernel performance metrics, while keeping both runtime overhead and profile size minimal.
