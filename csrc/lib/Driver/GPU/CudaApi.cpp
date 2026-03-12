@@ -66,6 +66,8 @@ DEFINE_DISPATCH(ExternLibCuda, launchKernel, cuLaunchKernel, CUfunction,
                 unsigned int, unsigned int, unsigned int, CUstream, void **,
                 void **)
 
+DEFINE_DISPATCH(ExternLibCuda, driverGetVersion, cuDriverGetVersion, int *)
+
 Device getDevice(uint64_t index) {
   CUdevice device;
   cuda::deviceGet<true>(&device, index);

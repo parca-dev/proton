@@ -63,6 +63,8 @@ CUresult launchKernel(CUfunction f, unsigned int gridDimX,
                       unsigned int blockDimZ, unsigned int sharedMemBytes,
                       CUstream hStream, void **kernelParams, void **extra);
 
+template <bool CheckSuccess> CUresult driverGetVersion(int *driverVersion);
+
 Device getDevice(uint64_t index);
 
 } // namespace cuda
